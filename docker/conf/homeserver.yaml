@@ -210,15 +210,3 @@ experimental_features:
 {% if SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION %}
 enable_registration_without_verification: {{ "True" if SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION else "False" }}
 {% endif %}
-
-# S3 media storage (optional)
-{% if S3_BUCKET_NAME %}
-media_storage_providers:
-  - module: s3_storage_provider.S3StorageProviderBackend
-    store_local: false
-    store_remote: false
-    store_synchronous: true
-    config:
-      bucket: "{{ S3_BUCKET_NAME }}"
-      region_name: "{{ AWS_REGION or 'ap-northeast-2' }}"
-{% endif %}
