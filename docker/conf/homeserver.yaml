@@ -191,3 +191,34 @@ trusted_key_servers:
 
 password_config:
    enabled: true
+
+## CLAP Configuration ##
+
+# Public base URL for .well-known generation
+{% if SYNAPSE_PUBLIC_BASEURL %}
+public_baseurl: "{{ SYNAPSE_PUBLIC_BASEURL }}"
+{% endif %}
+
+# Serve .well-known/matrix/client
+serve_server_wellknown: true
+
+# Enable native Sliding Sync support (no proxy needed!)
+experimental_features:
+  msc3575_enabled: true
+
+# Enable registration without email verification (optional, for dev)
+{% if SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION %}
+enable_registration_without_verification: {{ "True" if SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION else "False" }}
+{% endif %}
+
+# S3 media storage (optional)
+{% if S3_BUCKET_NAME %}
+media_storage_providers:
+  - module: s3_storage_provider.S3StorageProviderBackend
+    store_local: false
+    store_remote: false
+    store_synchronous: true
+    config:
+      bucket: "{{ S3_BUCKET_NAME }}"
+      region_name: "{{ AWS_REGION or 'ap-northeast-2' }}"
+{% endif %}

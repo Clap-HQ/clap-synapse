@@ -1,0 +1,254 @@
+name: Deploy to AWS ECS
+
+on:
+  push:
+    branches:
+      - clap-stable   # Auto-deploy to dev (Clap's stable branch)
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: clap-synapse
+  CONTAINER_NAME: synapse
+
+permissions:
+  id-token: write  # For OIDC
+  contents: read
+
+jobs:
+  determine-environment:
+    name: Determine Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-env.outputs.environments }}
+      image_tag: ${{ steps.set-env.outputs.image_tag }}
+
+    steps:
+      - name: Determine deployment environments
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Manual trigger - deploy to selected environment
+            echo "environments=[\"${{ inputs.environment }}\"]" >> $GITHUB_OUTPUT
+            case "${{ inputs.environment }}" in
+              dev) echo "image_tag=dev" >> $GITHUB_OUTPUT ;;
+              staging) echo "image_tag=staging" >> $GITHUB_OUTPUT ;;
+              production) echo "image_tag=latest" >> $GITHUB_OUTPUT ;;
+            esac
+          else
+            # clap-stable branch - deploy to dev only
+            echo "environments=[\"dev\"]" >> $GITHUB_OUTPUT
+            echo "image_tag=dev" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: determine-environment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract version
+        id: version
+        run: |
+          # Extract version from pyproject.toml (line starts with "version")
+          VERSION=$(grep "^version" pyproject.toml | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        id: build-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.determine-environment.outputs.image_tag }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          labels: |
+            gitsha1=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Set outputs and summary
+        id: set-outputs
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          VERSION_TAG: ${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}
+          ENV_TAG: ${{ needs.determine-environment.outputs.image_tag }}
+        run: |
+          echo "image=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$VERSION_TAG" >> $GITHUB_OUTPUT
+          echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+
+          echo "### Docker Images Pushed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$VERSION_TAG\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$ENV_TAG\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: [determine-environment, build]
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.determine-environment.outputs.environments) }}
+      max-parallel: 1  # Deploy one environment at a time
+
+    environment:
+      name: ${{ matrix.environment }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set environment variables
+        id: env-vars
+        run: |
+          case "${{ matrix.environment }}" in
+            dev)
+              echo "cluster=clap-cluster-dev" >> $GITHUB_OUTPUT
+              echo "service=clap-synapse-service-dev" >> $GITHUB_OUTPUT
+              echo "task_def=clap-synapse-dev" >> $GITHUB_OUTPUT
+              echo "target_group=clap-synapse-tg-dev" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "cluster=clap-cluster-staging" >> $GITHUB_OUTPUT
+              echo "service=clap-synapse-service-staging" >> $GITHUB_OUTPUT
+              echo "task_def=clap-synapse-staging" >> $GITHUB_OUTPUT
+              echo "target_group=clap-synapse-tg-staging" >> $GITHUB_OUTPUT
+              ;;
+            production)
+              echo "cluster=clap-cluster-production" >> $GITHUB_OUTPUT
+              echo "service=clap-synapse-service-production" >> $GITHUB_OUTPUT
+              echo "task_def=clap-synapse-production" >> $GITHUB_OUTPUT
+              echo "target_group=clap-synapse-tg-production" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ steps.env-vars.outputs.task_def }} \
+            --query taskDefinition > task-definition.json
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Fill in new image in task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.determine-environment.outputs.image_tag }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ steps.env-vars.outputs.service }}
+          cluster: ${{ steps.env-vars.outputs.cluster }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+      - name: Verify deployment
+        run: |
+          echo "Verifying deployment for ${{ matrix.environment }}..."
+          sleep 30
+
+          # Check target health
+          TARGET_GROUP_ARN=$(aws elbv2 describe-target-groups \
+            --names ${{ steps.env-vars.outputs.target_group }} \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+
+          HEALTHY_TARGETS=$(aws elbv2 describe-target-health \
+            --target-group-arn $TARGET_GROUP_ARN \
+            --query "length(TargetHealthDescriptions[?TargetHealth.State=='healthy'])" \
+            --output text)
+
+          echo "Healthy targets: $HEALTHY_TARGETS"
+
+          if [ "$HEALTHY_TARGETS" -lt 1 ]; then
+            echo "::error::No healthy targets in ${{ matrix.environment }}!"
+            exit 1
+          fi
+
+          echo "### Deployment Successful - ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Healthy targets: $HEALTHY_TARGETS" >> $GITHUB_STEP_SUMMARY
+
+  create-tag:
+    name: Create Deployment Tag
+    runs-on: ubuntu-latest
+    needs: [determine-environment, build, deploy]
+    if: github.ref == 'refs/heads/clap-stable'
+
+    permissions:
+      contents: write  # Required to create and push tags
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create and push tag
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          VERSION=$(grep -m 1 version pyproject.toml | cut -d'"' -f2)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+
+          TAG_NAME="deploy-$TIMESTAMP"
+          git tag -a $TAG_NAME -m "Deployment v$VERSION-$SHORT_SHA to ${{ needs.determine-environment.outputs.environments }}"
+          git push origin $TAG_NAME
+
+  rollback:
+    name: Rollback (Manual)
+    runs-on: ubuntu-latest
+    if: false  # Disabled - use separate rollback workflow
+
+    steps:
+      - name: Placeholder
+        run: echo "Rollback is disabled. Use the separate rollback workflow."
