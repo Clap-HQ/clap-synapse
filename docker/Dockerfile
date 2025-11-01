@@ -115,6 +115,10 @@ RUN \
     uv pip install --prefix="/install" /synapse[all]; \
   fi
 
+# Install S3 storage provider for Clap
+RUN --mount=type=cache,target=/root/.cache/uv \
+  uv pip install --prefix="/install" synapse-s3-storage-provider
+
 ###
 ### Stage 2: runtime dependencies download for ARM64 and AMD64
 ###

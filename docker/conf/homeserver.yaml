@@ -210,3 +210,17 @@ experimental_features:
 {% if SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION %}
 enable_registration_without_verification: {{ "True" if SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION else "False" }}
 {% endif %}
+
+## S3 Media Storage ##
+{% if S3_BUCKET_NAME %}
+media_storage_providers:
+  - module: s3_storage_provider.S3StorageProviderBackend
+    store_local: False        # Store directly to S3 only
+    store_remote: False       # Don't store remote media in S3
+    store_synchronous: True   # Synchronous upload for reliability
+    config:
+      bucket: "{{ S3_BUCKET_NAME }}"
+      region_name: "{{ AWS_REGION or "ap-northeast-2" }}"
+      storage_class: INTELLIGENT_TIERING  # Auto cost optimization
+      threadpool_size: 40
+{% endif %}
