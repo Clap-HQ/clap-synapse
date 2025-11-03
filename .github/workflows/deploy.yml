@@ -3,7 +3,7 @@ name: Deploy to AWS ECS
 on:
   push:
     branches:
-      - clap-stable   # Auto-deploy to dev (Clap's stable branch)
+      - clap/main     # Auto-deploy to dev (Clap's main branch)
 
   workflow_dispatch:
     inputs:
@@ -46,7 +46,7 @@ jobs:
               production) echo "image_tag=latest" >> $GITHUB_OUTPUT ;;
             esac
           else
-            # clap-stable branch - deploy to dev only
+            # clap/main branch - deploy to dev only
             echo "environments=[\"dev\"]" >> $GITHUB_OUTPUT
             echo "image_tag=dev" >> $GITHUB_OUTPUT
           fi
