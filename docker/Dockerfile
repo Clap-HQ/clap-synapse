@@ -187,6 +187,11 @@ COPY --from=builder /install /usr/local
 COPY ./docker/start.py /start.py
 COPY ./docker/conf /conf
 
+# Create appservices directory and copy registration file
+# Note: /data is mounted as a volume at runtime, so we use /conf instead
+RUN mkdir -p /conf/appservices
+COPY ./docker/conf/hookshot-registration.yaml /conf/appservices/
+
 EXPOSE 8008/tcp 8009/tcp 8448/tcp
 
 ENTRYPOINT ["/start.py"]

@@ -1,0 +1,22 @@
+id: matrix-hookshot
+as_token: "b950cb7fa4757219fa80c6f3c49c2d64feb9f13d48d05add1ea05dafcd0c3883"
+hs_token: "49a51dba00f457516a09c9db81ded3bbad6ae6fb75fed3f4b27796bdb26bd6ff"
+namespaces:
+  rooms: []
+  users:
+    - regex: "@_github_.*:dev.clap.ac"
+      exclusive: true
+    - regex: "@_gitlab_.*:dev.clap.ac"
+      exclusive: true
+    - regex: "@_jira_.*:dev.clap.ac"
+      exclusive: true
+    - regex: "@_webhooks_.*:dev.clap.ac"
+      exclusive: true
+    - regex: "@hookshot:dev.clap.ac"
+      exclusive: true
+  aliases:
+    - regex: "#github_.+:dev.clap.ac"
+      exclusive: true
+sender_localpart: hookshot
+url: "https://hookshot.dev.clap.ac:9993"
+rate_limited: false

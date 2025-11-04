@@ -93,7 +93,9 @@ def generate_config_from_template(
                     handle.write(value)
             environ[secret] = value
 
-    environ["SYNAPSE_APPSERVICES"] = glob.glob("/data/appservices/*.yaml")
+    # Look for appservice registration files in /conf/appservices
+    # (not /data/appservices, since /data is a mounted volume)
+    environ["SYNAPSE_APPSERVICES"] = glob.glob("/conf/appservices/*.yaml")
     if not os.path.exists(config_dir):
         os.mkdir(config_dir)
 
