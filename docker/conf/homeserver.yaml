@@ -215,9 +215,9 @@ enable_registration_without_verification: {{ "True" if SYNAPSE_ENABLE_REGISTRATI
 {% if S3_BUCKET_NAME %}
 media_storage_providers:
   - module: s3_storage_provider.S3StorageProviderBackend
-    store_local: True         # Always store locally (required by Synapse)
-    store_remote: False       # Don't store remote media in S3
-    store_synchronous: True   # Synchronous upload for reliability
+    store_local: True
+    store_remote: True
+    store_synchronous: True
     config:
       bucket: "{{ S3_BUCKET_NAME }}"
       region_name: "{{ AWS_REGION or "ap-northeast-2" }}"
