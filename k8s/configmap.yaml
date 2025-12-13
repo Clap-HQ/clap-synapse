@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synapse-config
+  namespace: dev
+data:
+  SYNAPSE_SERVER_NAME: "dev.clap.ac"
+  SYNAPSE_PUBLIC_BASEURL: "https://dev.clap.ac"
+  SYNAPSE_REPORT_STATS: "no"
+  POSTGRES_HOST: "clap-synapse-db-dev.cfiyo0k0ywot.ap-northeast-2.rds.amazonaws.com"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "synapse"
+  POSTGRES_USER: "synapse"
+  AWS_REGION: "ap-northeast-2"
+  S3_MEDIA_BUCKET: "clap-messenger-media-dev-619888520513"

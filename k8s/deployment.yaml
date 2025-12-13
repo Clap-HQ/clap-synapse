@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synapse
+  namespace: dev
+  labels:
+    app: synapse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synapse
+  template:
+    metadata:
+      labels:
+        app: synapse
+    spec:
+      serviceAccountName: synapse
+      securityContext:
+        fsGroup: 991
+      containers:
+      - name: synapse
+        image: 619888520513.dkr.ecr.ap-northeast-2.amazonaws.com/clap-synapse:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8008
+          protocol: TCP
+        - name: federation
+          containerPort: 8448
+          protocol: TCP
+
+        envFrom:
+        - configMapRef:
+            name: synapse-config
+
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: synapse-db-credentials
+              key: password
+        - name: SYNAPSE_REGISTRATION_SHARED_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: synapse-app-credentials
+              key: registration_shared_secret
+        - name: SYNAPSE_MACAROON_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: synapse-app-credentials
+              key: macaroon_secret_key
+        - name: SYNAPSE_FORM_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: synapse-app-credentials
+              key: form_secret
+
+        resources:
+          requests:
+            cpu: 512m
+            memory: 1Gi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+
+        volumeMounts:
+        - name: data
+          mountPath: /data
+
+        livenessProbe:
+          httpGet:
+            path: /_matrix/client/versions
+            port: 8008
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /_matrix/client/versions
+            port: 8008
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: synapse-efs-pvc
