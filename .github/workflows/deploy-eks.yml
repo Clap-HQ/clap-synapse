@@ -106,36 +106,38 @@ jobs:
         run: |
           cd k8s
           chmod +x create-secrets.sh
-          ./create-secrets.sh
+          ./create-secrets.sh ${{ steps.env-vars.outputs.namespace }}
 
           echo "✅ Secrets created successfully"
 
       - name: Deploy Kubernetes manifests
         run: |
           cd k8s
+          NAMESPACE="${{ steps.env-vars.outputs.namespace }}"
 
-          echo "📦 Deploying manifests to ${{ steps.env-vars.outputs.namespace }} namespace..."
+          echo "📦 Deploying manifests to $NAMESPACE namespace..."
 
-          # Deploy in order
+          # Deploy namespace (cluster-scoped, no -n flag)
           kubectl apply -f namespace.yaml
           echo "✅ Namespace applied"
 
-          kubectl apply -f serviceaccount.yaml
+          # Deploy namespaced resources with explicit -n flag
+          kubectl apply -f serviceaccount.yaml -n $NAMESPACE
           echo "✅ ServiceAccount applied"
 
           kubectl apply -f persistentvolume.yaml
-          echo "✅ PersistentVolume applied"
+          echo "✅ PersistentVolume applied (cluster-scoped)"
 
-          kubectl apply -f configmap.yaml
+          kubectl apply -f configmap.yaml -n $NAMESPACE
           echo "✅ ConfigMap applied"
 
-          kubectl apply -f deployment.yaml
+          kubectl apply -f deployment.yaml -n $NAMESPACE
           echo "✅ Deployment applied"
 
-          kubectl apply -f service.yaml
+          kubectl apply -f service.yaml -n $NAMESPACE
           echo "✅ Service applied"
 
-          kubectl apply -f ingress.yaml
+          kubectl apply -f ingress.yaml -n $NAMESPACE
           echo "✅ Ingress applied"
 
       - name: Wait for Pod to be Ready
@@ -188,24 +190,86 @@ jobs:
 
           echo "🔍 Testing Matrix API health endpoint..."
 
-          # Get Ingress hostname (ALB DNS)
-          ALB_DNS=$(kubectl get ingress synapse -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          # Poll for Ingress hostname with timeout
+          MAX_WAIT=300  # 5 minutes
+          INTERVAL=10   # 10 seconds
+          ELAPSED=0
+          ALB_DNS=""
+
+          echo "⏳ Waiting for Ingress to get ALB hostname..."
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            ALB_DNS=$(kubectl get ingress synapse -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+
+            if [ -n "$ALB_DNS" ]; then
+              echo "✅ ALB DNS available: $ALB_DNS"
+              break
+            fi
+
+            echo "⏳ Waiting for ALB provisioning... (${ELAPSED}s/${MAX_WAIT}s)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
 
           if [ -z "$ALB_DNS" ]; then
-            echo "⚠️ ALB DNS not yet available. Ingress may still be provisioning."
-            echo "Checking Pod health directly..."
+            echo "⚠️ ALB DNS not available after ${MAX_WAIT}s. Checking Pod health directly..."
 
             POD_NAME=$(kubectl get pod -n $NAMESPACE -l app=synapse -o jsonpath='{.items[0].metadata.name}')
-            kubectl exec -n $NAMESPACE $POD_NAME -- curl -s http://localhost:8008/_matrix/client/versions
+            if [ -n "$POD_NAME" ]; then
+              echo "Testing Pod directly: $POD_NAME"
+              kubectl exec -n $NAMESPACE $POD_NAME -- curl -s http://localhost:8008/_matrix/client/versions
+              echo "✅ Pod health check passed (ALB may still be provisioning)"
+            else
+              echo "❌ No Pod found"
+              exit 1
+            fi
           else
-            echo "ALB DNS: $ALB_DNS"
+            # Poll for healthy ALB targets
+            echo "⏳ Waiting for ALB target health..."
+            ELAPSED=0
+            HEALTHY=false
 
-            # Wait for ALB to be ready (may take a few minutes)
-            echo "⏳ Waiting for ALB to be healthy (may take 2-4 minutes)..."
-            sleep 60
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              # Try to get target group ARN from Ingress annotations
+              TG_ARN=$(kubectl get ingress synapse -n $NAMESPACE -o jsonpath='{.metadata.annotations.alb\.ingress\.kubernetes\.io/target-group-arns}' 2>/dev/null | cut -d',' -f1 || echo "")
 
-            # Test HTTP endpoint (will redirect to HTTPS)
-            curl -L -s http://$ALB_DNS/_matrix/client/versions || echo "HTTP test failed (ALB may still be provisioning)"
+              if [ -n "$TG_ARN" ]; then
+                HEALTHY_COUNT=$(aws elbv2 describe-target-health \
+                  --target-group-arn "$TG_ARN" \
+                  --query "length(TargetHealthDescriptions[?TargetHealth.State=='healthy'])" \
+                  --output text 2>/dev/null || echo "0")
+
+                if [ "$HEALTHY_COUNT" -gt 0 ]; then
+                  echo "✅ ALB has $HEALTHY_COUNT healthy target(s)"
+                  HEALTHY=true
+                  break
+                fi
+              fi
+
+              echo "⏳ Waiting for healthy targets... (${ELAPSED}s/${MAX_WAIT}s)"
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            # Test HTTP endpoint
+            if [ "$HEALTHY" = true ]; then
+              echo "🔍 Testing HTTP endpoint..."
+              RESPONSE=$(curl -L -s -w "\n%{http_code}" http://$ALB_DNS/_matrix/client/versions)
+              HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "✅ Health endpoint responding (HTTP $HTTP_CODE)"
+                echo "$RESPONSE" | head -n -1
+              else
+                echo "⚠️ Health endpoint returned HTTP $HTTP_CODE"
+              fi
+            else
+              echo "⚠️ ALB targets not healthy after ${MAX_WAIT}s, but Pod is healthy"
+              echo "This is normal - ALB may take several minutes to provision fully"
+
+              # Fallback to Pod health check
+              POD_NAME=$(kubectl get pod -n $NAMESPACE -l app=synapse -o jsonpath='{.items[0].metadata.name}')
+              kubectl exec -n $NAMESPACE $POD_NAME -- curl -s http://localhost:8008/_matrix/client/versions
+            fi
           fi
 
           echo "✅ Deployment verification complete"

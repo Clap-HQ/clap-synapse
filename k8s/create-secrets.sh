@@ -1,6 +1,9 @@
 #!/bin/bash
 # Script to create Kubernetes secrets from AWS Secrets Manager
 # Run this BEFORE deploying Synapse to EKS
+#
+# Usage: ./create-secrets.sh [namespace]
+# Default namespace: dev
 
 set -e
 set -o pipefail
@@ -10,7 +13,11 @@ if [ -f .env ]; then
   source .env
 fi
 
+# Get namespace from argument or environment variable, default to 'dev'
+NAMESPACE="${1:-${NAMESPACE:-dev}}"
+
 echo "🔐 Creating Kubernetes Secrets from AWS Secrets Manager..."
+echo "📦 Target namespace: $NAMESPACE"
 
 # Validate required environment variables
 if [ -z "${DB_SECRET_ARN}" ]; then
@@ -78,7 +85,7 @@ fi
 
 echo "✅ Secrets fetched successfully"
 
-echo "🔧 Creating Kubernetes Secrets in 'dev' namespace..."
+echo "🔧 Creating Kubernetes Secrets in '$NAMESPACE' namespace..."
 
 # Verify all variables are set before creating secrets
 if [ -z "$DB_PASSWORD" ]; then
@@ -94,7 +101,7 @@ fi
 # Create DB credentials secret with proper quoting
 kubectl create secret generic synapse-db-credentials \
   --from-literal="password=${DB_PASSWORD}" \
-  --namespace=dev \
+  --namespace="${NAMESPACE}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Create app credentials secret with proper quoting
@@ -102,12 +109,12 @@ kubectl create secret generic synapse-app-credentials \
   --from-literal="registration_shared_secret=${REGISTRATION_SECRET}" \
   --from-literal="macaroon_secret_key=${MACAROON_SECRET}" \
   --from-literal="form_secret=${FORM_SECRET}" \
-  --namespace=dev \
+  --namespace="${NAMESPACE}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-echo "✅ Secrets created successfully in 'dev' namespace"
+echo "✅ Secrets created successfully in '$NAMESPACE' namespace"
 echo ""
 echo "📋 Verify secrets:"
-echo "  kubectl get secrets -n dev | grep synapse"
-echo "  kubectl describe secret synapse-db-credentials -n dev"
-echo "  kubectl describe secret synapse-app-credentials -n dev"
+echo "  kubectl get secrets -n $NAMESPACE | grep synapse"
+echo "  kubectl describe secret synapse-db-credentials -n $NAMESPACE"
+echo "  kubectl describe secret synapse-app-credentials -n $NAMESPACE"
