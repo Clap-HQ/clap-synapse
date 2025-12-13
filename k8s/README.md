@@ -47,6 +47,21 @@ kubectl get serviceaccount synapse -n dev -o yaml
 
 ### Step 3: Create Secrets
 
+**Set required environment variables**:
+```bash
+export DB_SECRET_ARN="arn:aws:secretsmanager:ap-northeast-2:619888520513:secret:clap/synapse/db-20251028050850614600000006-lEW6Pv"
+export SYNAPSE_SECRET_ARN="arn:aws:secretsmanager:ap-northeast-2:619888520513:secret:clap/synapse/secrets-20251028050850152900000001-SuOtep"
+```
+
+**Or create a `.env` file** (optional):
+```bash
+cat > k8s/.env <<EOF
+DB_SECRET_ARN=arn:aws:secretsmanager:ap-northeast-2:619888520513:secret:clap/synapse/db-20251028050850614600000006-lEW6Pv
+SYNAPSE_SECRET_ARN=arn:aws:secretsmanager:ap-northeast-2:619888520513:secret:clap/synapse/secrets-20251028050850152900000001-SuOtep
+EOF
+```
+
+**Run the script**:
 ```bash
 ./create-secrets.sh
 ```

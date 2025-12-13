@@ -30,6 +30,15 @@ spec:
           containerPort: 8448
           protocol: TCP
 
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 991
+          runAsGroup: 991
+          capabilities:
+            drop:
+            - ALL
+
         envFrom:
         - configMapRef:
             name: synapse-config

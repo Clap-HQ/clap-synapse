@@ -78,6 +78,30 @@ jobs:
           kubectl get nodes
           echo "✅ kubectl configured successfully"
 
+      - name: Set Secret ARNs from Terraform
+        id: set-arns
+        run: |
+          # Get Secret ARNs from AWS SSM Parameter Store or environment
+          # These should be stored as GitHub Secrets or fetched from Terraform state
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+
+          case "$ENV" in
+            dev)
+              echo "DB_SECRET_ARN=${{ secrets.DEV_DB_SECRET_ARN }}" >> $GITHUB_ENV
+              echo "SYNAPSE_SECRET_ARN=${{ secrets.DEV_SYNAPSE_SECRET_ARN }}" >> $GITHUB_ENV
+              ;;
+            staging)
+              echo "DB_SECRET_ARN=${{ secrets.STAGING_DB_SECRET_ARN }}" >> $GITHUB_ENV
+              echo "SYNAPSE_SECRET_ARN=${{ secrets.STAGING_SYNAPSE_SECRET_ARN }}" >> $GITHUB_ENV
+              ;;
+            production)
+              echo "DB_SECRET_ARN=${{ secrets.PROD_DB_SECRET_ARN }}" >> $GITHUB_ENV
+              echo "SYNAPSE_SECRET_ARN=${{ secrets.PROD_SYNAPSE_SECRET_ARN }}" >> $GITHUB_ENV
+              ;;
+          esac
+
+          echo "✅ Secret ARNs configured"
+
       - name: Create Kubernetes Secrets
         run: |
           cd k8s
