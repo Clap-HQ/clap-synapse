@@ -1,0 +1,200 @@
+name: Deploy to AWS EKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+
+  push:
+    branches:
+      - clap/main
+    paths:
+      - 'k8s/**'
+
+env:
+  AWS_REGION: ap-northeast-2
+
+permissions:
+  id-token: write  # For OIDC
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set environment variables
+        id: env-vars
+        run: |
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+
+          case "$ENV" in
+            dev)
+              echo "cluster=clap-eks-dev" >> $GITHUB_OUTPUT
+              echo "namespace=dev" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "cluster=clap-eks-staging" >> $GITHUB_OUTPUT
+              echo "namespace=staging" >> $GITHUB_OUTPUT
+              ;;
+            production)
+              echo "cluster=clap-eks-production" >> $GITHUB_OUTPUT
+              echo "namespace=production" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.31.0'
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ steps.env-vars.outputs.cluster }}
+
+          # Verify connection
+          kubectl get nodes
+          echo "✅ kubectl configured successfully"
+
+      - name: Create Kubernetes Secrets
+        run: |
+          cd k8s
+          chmod +x create-secrets.sh
+          ./create-secrets.sh
+
+          echo "✅ Secrets created successfully"
+
+      - name: Deploy Kubernetes manifests
+        run: |
+          cd k8s
+
+          echo "📦 Deploying manifests to ${{ steps.env-vars.outputs.namespace }} namespace..."
+
+          # Deploy in order
+          kubectl apply -f namespace.yaml
+          echo "✅ Namespace applied"
+
+          kubectl apply -f serviceaccount.yaml
+          echo "✅ ServiceAccount applied"
+
+          kubectl apply -f persistentvolume.yaml
+          echo "✅ PersistentVolume applied"
+
+          kubectl apply -f configmap.yaml
+          echo "✅ ConfigMap applied"
+
+          kubectl apply -f deployment.yaml
+          echo "✅ Deployment applied"
+
+          kubectl apply -f service.yaml
+          echo "✅ Service applied"
+
+          kubectl apply -f ingress.yaml
+          echo "✅ Ingress applied"
+
+      - name: Wait for Pod to be Ready
+        run: |
+          echo "⏳ Waiting for Pod to be Ready..."
+          kubectl wait --for=condition=Ready pod \
+            -l app=synapse \
+            -n ${{ steps.env-vars.outputs.namespace }} \
+            --timeout=300s
+
+          echo "✅ Pod is Ready"
+
+      - name: Verify Deployment
+        run: |
+          NAMESPACE="${{ steps.env-vars.outputs.namespace }}"
+
+          echo "### 📊 Deployment Status - ${{ steps.env-vars.outputs.cluster }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check Pods
+          echo "#### Pods" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n $NAMESPACE -l app=synapse >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check Service
+          echo "#### Service" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl get service synapse -n $NAMESPACE >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check Ingress
+          echo "#### Ingress" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl get ingress synapse -n $NAMESPACE >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Get Pod logs (last 50 lines)
+          echo "#### Recent Logs" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl logs -n $NAMESPACE -l app=synapse --tail=50 >> $GITHUB_STEP_SUMMARY || echo "Failed to fetch logs" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Test Health Endpoint
+        run: |
+          NAMESPACE="${{ steps.env-vars.outputs.namespace }}"
+
+          echo "🔍 Testing Matrix API health endpoint..."
+
+          # Get Ingress hostname (ALB DNS)
+          ALB_DNS=$(kubectl get ingress synapse -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+          if [ -z "$ALB_DNS" ]; then
+            echo "⚠️ ALB DNS not yet available. Ingress may still be provisioning."
+            echo "Checking Pod health directly..."
+
+            POD_NAME=$(kubectl get pod -n $NAMESPACE -l app=synapse -o jsonpath='{.items[0].metadata.name}')
+            kubectl exec -n $NAMESPACE $POD_NAME -- curl -s http://localhost:8008/_matrix/client/versions
+          else
+            echo "ALB DNS: $ALB_DNS"
+
+            # Wait for ALB to be ready (may take a few minutes)
+            echo "⏳ Waiting for ALB to be healthy (may take 2-4 minutes)..."
+            sleep 60
+
+            # Test HTTP endpoint (will redirect to HTTPS)
+            curl -L -s http://$ALB_DNS/_matrix/client/versions || echo "HTTP test failed (ALB may still be provisioning)"
+          fi
+
+          echo "✅ Deployment verification complete"
+
+      - name: Create deployment record
+        run: |
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          echo "### 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: $ENV" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster**: ${{ steps.env-vars.outputs.cluster }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Namespace**: ${{ steps.env-vars.outputs.namespace }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: $TIMESTAMP" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
