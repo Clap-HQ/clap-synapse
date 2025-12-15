@@ -12,4 +12,6 @@ data:
   POSTGRES_DB: "synapse"
   POSTGRES_USER: "synapse"
   AWS_REGION: "ap-northeast-2"
-  S3_MEDIA_BUCKET: "clap-messenger-media-dev-619888520513"
+  # S3 Storage Provider configuration
+  # Note: Variable name must match homeserver.yaml template (S3_BUCKET_NAME)
+  S3_BUCKET_NAME: "clap-messenger-media-dev-619888520513"
