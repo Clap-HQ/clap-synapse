@@ -26,8 +26,8 @@ metadata:
     # Target Group
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
 
-    # Tags
-    alb.ingress.kubernetes.io/tags: Environment=dev,Project=clap,Service=synapse
+    # Tags (shared with other services in the same ALB group)
+    alb.ingress.kubernetes.io/tags: Environment=dev,Project=clap,ManagedBy=kubernetes
 spec:
   rules:
   - host: dev.clap.ac
