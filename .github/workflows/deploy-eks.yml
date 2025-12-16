@@ -214,6 +214,8 @@ jobs:
           kubectl apply -f service.yaml
           echo "✅ Service applied"
 
+          # Delete and recreate ingress to handle group.name changes
+          kubectl delete ingress synapse -n ${{ steps.env-vars.outputs.namespace }} --ignore-not-found=true
           kubectl apply -f ingress.yaml
           echo "✅ Ingress applied"
 
