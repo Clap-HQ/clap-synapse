@@ -15,3 +15,6 @@ data:
   # S3 Storage Provider configuration
   # Note: Variable name must match homeserver.yaml template (S3_BUCKET_NAME)
   S3_BUCKET_NAME: "clap-messenger-media-dev-619888520513"
+  # Application Services (bridges)
+  # Note: start.py auto-discovers registration files from /conf/appservices/*.yaml
+  # Mount appservice secrets to /conf/appservices directory

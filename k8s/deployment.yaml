@@ -76,6 +76,9 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /data
+        - name: appservices
+          mountPath: /conf/appservices
+          readOnly: true
 
         livenessProbe:
           httpGet:
@@ -99,3 +102,6 @@ spec:
       - name: data
         persistentVolumeClaim:
           claimName: synapse-efs-pvc
+      - name: appservices
+        secret:
+          secretName: synapse-appservices-tokens
