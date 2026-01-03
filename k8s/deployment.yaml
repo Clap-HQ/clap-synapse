@@ -115,3 +115,6 @@ spec:
       - name: appservices
         secret:
           secretName: synapse-appservices-tokens
+      # Critical service: always run on On-Demand nodes
+      nodeSelector:
+        eks.amazonaws.com/capacityType: ON_DEMAND
