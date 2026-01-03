@@ -33,6 +33,29 @@ spec:
   - host: dev.clap.ac
     http:
       paths:
+      # MAS handles authentication endpoints
+      - path: /_matrix/client/v3/login
+        pathType: Prefix
+        backend:
+          service:
+            name: mas-service
+            port:
+              number: 8080
+      - path: /_matrix/client/v3/logout
+        pathType: Prefix
+        backend:
+          service:
+            name: mas-service
+            port:
+              number: 8080
+      - path: /_matrix/client/v3/refresh
+        pathType: Prefix
+        backend:
+          service:
+            name: mas-service
+            port:
+              number: 8080
+      # Synapse handles everything else
       - path: /
         pathType: Prefix
         backend:
@@ -43,6 +66,29 @@ spec:
   - host: matrix.dev.clap.ac
     http:
       paths:
+      # MAS handles authentication endpoints
+      - path: /_matrix/client/v3/login
+        pathType: Prefix
+        backend:
+          service:
+            name: mas-service
+            port:
+              number: 8080
+      - path: /_matrix/client/v3/logout
+        pathType: Prefix
+        backend:
+          service:
+            name: mas-service
+            port:
+              number: 8080
+      - path: /_matrix/client/v3/refresh
+        pathType: Prefix
+        backend:
+          service:
+            name: mas-service
+            port:
+              number: 8080
+      # Synapse handles everything else
       - path: /
         pathType: Prefix
         backend:

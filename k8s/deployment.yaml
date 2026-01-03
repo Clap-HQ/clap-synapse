@@ -64,6 +64,16 @@ spec:
             secretKeyRef:
               name: synapse-app-credentials
               key: form_secret
+        # MAS Integration
+        - name: MAS_ENABLED
+          value: "true"
+        - name: MAS_ENDPOINT
+          value: "http://mas-service.dev.svc.cluster.local:8080"
+        - name: MAS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: mas-secrets
+              key: MAS_SYNAPSE_SECRET
 
         resources:
           requests:

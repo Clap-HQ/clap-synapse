@@ -189,8 +189,22 @@ trusted_key_servers:
     verify_keys:
       "ed25519:auto": "Noi6WqcDj0QmPxCNQqgezwTlBKrfqehY1u2FyWP9uYw"
 
+## Password & MAS Configuration ##
+
+{% if MAS_ENABLED %}
+# Matrix Authentication Service (OAuth/OIDC)
+matrix_authentication_service:
+  enabled: true
+  endpoint: "{{ MAS_ENDPOINT or 'http://mas-service.dev.svc.cluster.local:8080' }}"
+  secret: "{{ MAS_SECRET }}"
+
+# Password auth must be disabled when MAS is enabled
+password_config:
+   enabled: false
+{% else %}
 password_config:
    enabled: true
+{% endif %}
 
 ## CLAP Configuration ##
 
