@@ -82,8 +82,15 @@ event_cache_size: "{{ SYNAPSE_EVENT_CACHE_SIZE or "10K" }}"
 
 ## Ratelimiting ##
 
-rc_messages_per_second: 0.2
-rc_message_burst_count: 10.0
+rc_message:
+  per_second: 1.0
+  burst_count: 50
+
+rc_joins:
+  local:
+    per_second: 1.0
+    burst_count: 50
+
 federation_rc_window_size: 1000
 federation_rc_sleep_limit: 10
 federation_rc_sleep_delay: 500
