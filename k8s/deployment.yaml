@@ -18,6 +18,61 @@ spec:
       serviceAccountName: synapse
       securityContext:
         fsGroup: 991
+      initContainers:
+      # Generate homeserver.yaml from environment variables using Jinja2 template
+      - name: config-generator
+        image: 619888520513.dkr.ecr.ap-northeast-2.amazonaws.com/clap-synapse:latest
+        imagePullPolicy: Always
+        command: ["python", "/start.py", "migrate_config"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 991
+          runAsGroup: 991
+          capabilities:
+            drop:
+            - ALL
+        envFrom:
+        - configMapRef:
+            name: synapse-config
+        env:
+        - name: SYNAPSE_NO_TLS
+          value: "yes"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: synapse-db-credentials
+              key: password
+        - name: SYNAPSE_REGISTRATION_SHARED_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: synapse-app-credentials
+              key: registration_shared_secret
+        - name: SYNAPSE_MACAROON_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: synapse-app-credentials
+              key: macaroon_secret_key
+        - name: SYNAPSE_FORM_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: synapse-app-credentials
+              key: form_secret
+        - name: MAS_ENABLED
+          value: "true"
+        - name: MAS_ENDPOINT
+          value: "http://mas-service.dev.svc.cluster.local:8080"
+        - name: MAS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: mas-secrets
+              key: MAS_SYNAPSE_SECRET
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: appservices
+          mountPath: /conf/appservices
+          readOnly: true
       containers:
       - name: synapse
         image: 619888520513.dkr.ecr.ap-northeast-2.amazonaws.com/clap-synapse:latest
@@ -44,6 +99,8 @@ spec:
             name: synapse-config
 
         env:
+        - name: SYNAPSE_NO_TLS
+          value: "yes"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
