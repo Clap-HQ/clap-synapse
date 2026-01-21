@@ -9,8 +9,7 @@ on:
         type: choice
         options:
           - dev
-          - staging
-          - production
+          - prod
       skip_build:
         description: 'Skip Docker build (use existing image)'
         required: false
@@ -132,13 +131,9 @@ jobs:
               echo "cluster=clap-eks-dev" >> $GITHUB_OUTPUT
               echo "namespace=dev" >> $GITHUB_OUTPUT
               ;;
-            staging)
-              echo "cluster=clap-eks-staging" >> $GITHUB_OUTPUT
-              echo "namespace=staging" >> $GITHUB_OUTPUT
-              ;;
-            production)
-              echo "cluster=clap-eks-production" >> $GITHUB_OUTPUT
-              echo "namespace=production" >> $GITHUB_OUTPUT
+            prod)
+              echo "cluster=clap-eks-prod" >> $GITHUB_OUTPUT
+              echo "namespace=prod" >> $GITHUB_OUTPUT
               ;;
           esac
 
@@ -169,11 +164,7 @@ jobs:
               echo "DB_SECRET_ARN=${{ secrets.DEV_DB_SECRET_ARN }}" >> $GITHUB_ENV
               echo "SYNAPSE_SECRET_ARN=${{ secrets.DEV_SYNAPSE_SECRET_ARN }}" >> $GITHUB_ENV
               ;;
-            staging)
-              echo "DB_SECRET_ARN=${{ secrets.STAGING_DB_SECRET_ARN }}" >> $GITHUB_ENV
-              echo "SYNAPSE_SECRET_ARN=${{ secrets.STAGING_SYNAPSE_SECRET_ARN }}" >> $GITHUB_ENV
-              ;;
-            production)
+            prod)
               echo "DB_SECRET_ARN=${{ secrets.PROD_DB_SECRET_ARN }}" >> $GITHUB_ENV
               echo "SYNAPSE_SECRET_ARN=${{ secrets.PROD_SYNAPSE_SECRET_ARN }}" >> $GITHUB_ENV
               ;;

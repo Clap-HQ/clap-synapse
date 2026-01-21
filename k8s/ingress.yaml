@@ -32,12 +32,15 @@ metadata:
     # Apple App Site Association - ALB Fixed Response
     alb.ingress.kubernetes.io/actions.apple-aasa: |
       {"type":"fixed-response","fixedResponseConfig":{"contentType":"application/json","statusCode":"200","messageBody":"{\"applinks\":{\"apps\":[],\"details\":[{\"appIDs\":[\"DFDZD34G7P.ac.clap.app.dev\"],\"components\":[{\"/\":\"/oidc/*\"}]}]},\"webcredentials\":{\"apps\":[\"DFDZD34G7P.ac.clap.app.dev\"]}}"}}
+
+    # Android Asset Links - ALB Fixed Response
+    alb.ingress.kubernetes.io/actions.android-assetlinks: |
+      {"type":"fixed-response","fixedResponseConfig":{"contentType":"application/json","statusCode":"200","messageBody":"[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"android_app\",\"package_name\":\"ac.clap.app.dev\",\"sha256_cert_fingerprints\":[\"31:60:E1:34:70:1E:08:2C:B4:75:FD:4C:4A:AC:72:88:7B:13:70:AF:8C:F8:A3:D5:BB:1E:61:E7:79:A5:43:B3\",\"FB:32:B6:8F:12:A2:C2:D6:38:97:BC:71:B1:6B:7E:EA:68:54:D7:3F:3C:73:2E:F7:81:D4:89:71:2F:95:9B:16\"]}}]"}}
 spec:
   rules:
   - host: dev.clap.ac
     http:
       paths:
-      # Apple App Site Association - ALB Fixed Response
       - path: /.well-known/apple-app-site-association
         pathType: Exact
         backend:
@@ -45,7 +48,13 @@ spec:
             name: apple-aasa
             port:
               name: use-annotation
-      # MAS handles authentication endpoints
+      - path: /.well-known/assetlinks.json
+        pathType: Exact
+        backend:
+          service:
+            name: android-assetlinks
+            port:
+              name: use-annotation
       - path: /_matrix/client/v3/login
         pathType: Prefix
         backend:
@@ -78,15 +87,6 @@ spec:
   - host: matrix.dev.clap.ac
     http:
       paths:
-      # Apple App Site Association - ALB Fixed Response
-      - path: /.well-known/apple-app-site-association
-        pathType: Exact
-        backend:
-          service:
-            name: apple-aasa
-            port:
-              name: use-annotation
-      # MAS handles authentication endpoints
       - path: /_matrix/client/v3/login
         pathType: Prefix
         backend:
