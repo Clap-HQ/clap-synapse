@@ -72,6 +72,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Determine environment tag
+        id: env-tag
+        run: |
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          echo "env=${ENV}" >> $GITHUB_OUTPUT
+
       - name: Build and push ARM64 image
         uses: docker/build-push-action@v6
         with:
@@ -80,13 +86,14 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.version }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:arm64-${{ steps.meta.outputs.timestamp }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-tag.outputs.env }}-${{ steps.meta.outputs.version }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-tag.outputs.env }}-latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.env-tag.outputs.env }}-${{ github.sha }}
           labels: |
             gitsha1=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
             org.opencontainers.image.architecture=arm64
+            environment=${{ steps.env-tag.outputs.env }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -96,10 +103,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: ${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Repository**: ${{ env.ECR_REPOSITORY }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ steps.env-tag.outputs.env }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Tags**:" >> $GITHUB_STEP_SUMMARY
-          echo "  - \`${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "  - \`latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "  - \`arm64-${{ steps.meta.outputs.timestamp }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - \`${{ steps.env-tag.outputs.env }}-${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - \`${{ steps.env-tag.outputs.env }}-latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - \`${{ steps.env-tag.outputs.env }}-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Platform**: linux/arm64 (for EKS Graviton)" >> $GITHUB_STEP_SUMMARY
 
   deploy:
@@ -132,7 +140,7 @@ jobs:
               echo "namespace=dev" >> $GITHUB_OUTPUT
               ;;
             prod)
-              echo "cluster=clap-eks-prod" >> $GITHUB_OUTPUT
+              echo "cluster=clap-eks-dev" >> $GITHUB_OUTPUT
               echo "namespace=prod" >> $GITHUB_OUTPUT
               ;;
           esac
