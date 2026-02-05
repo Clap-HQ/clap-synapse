@@ -245,3 +245,19 @@ media_storage_providers:
       storage_class: INTELLIGENT_TIERING  # Auto cost optimization
       threadpool_size: 40
 {% endif %}
+
+## Modules ##
+
+{% if AUTO_DM_BOT_USER_ID %}
+modules:
+  - module: synapse.modules.auto_dm_bot.AutoDmBot
+    config:
+      enabled: true
+      bot_user_id: "{{ AUTO_DM_BOT_USER_ID }}"
+      {% if AUTO_DM_BOT_WELCOME_MESSAGE %}
+      welcome_message: "{{ AUTO_DM_BOT_WELCOME_MESSAGE }}"
+      {% endif %}
+      {% if AUTO_DM_BOT_ROOM_NAME %}
+      room_name: "{{ AUTO_DM_BOT_ROOM_NAME }}"
+      {% endif %}
+{% endif %}
