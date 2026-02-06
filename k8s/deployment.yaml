@@ -21,7 +21,7 @@ spec:
       initContainers:
       # Generate homeserver.yaml from environment variables using Jinja2 template
       - name: config-generator
-        image: 619888520513.dkr.ecr.ap-northeast-2.amazonaws.com/clap-synapse:latest
+        image: 619888520513.dkr.ecr.ap-northeast-2.amazonaws.com/clap-synapse:dev-latest
         imagePullPolicy: Always
         command: ["python", "/start.py", "migrate_config"]
         securityContext:
@@ -75,7 +75,7 @@ spec:
           readOnly: true
       containers:
       - name: synapse
-        image: 619888520513.dkr.ecr.ap-northeast-2.amazonaws.com/clap-synapse:latest
+        image: 619888520513.dkr.ecr.ap-northeast-2.amazonaws.com/clap-synapse:dev-latest
         imagePullPolicy: Always
         ports:
         - name: http
