@@ -30,9 +30,9 @@ class AutoDmBotConfig:
 
 
 class AutoDmBot:
-    def __init__(self, config: AutoDmBotConfig, api: ModuleApi):
+    def __init__(self, config: dict, api: ModuleApi):
         self._api = api
-        self._config = config
+        self._config = AutoDmBotConfig(config)
         self.server_name = api.server_name
 
         if not self._config.enabled:
