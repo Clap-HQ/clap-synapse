@@ -223,6 +223,11 @@ public_baseurl: "{{ SYNAPSE_PUBLIC_BASEURL }}"
 # Serve .well-known/matrix/client
 serve_server_wellknown: true
 
+extra_well_known_client_content:
+  org.matrix.msc4143.rtc_foci:
+    - type: livekit
+      livekit_service_url: "{{ LIVEKIT_JWT_SERVICE_URL | default('https://rtc.dev.clap.ac', true) }}"
+
 # Enable native Sliding Sync support (no proxy needed!)
 experimental_features:
   msc3575_enabled: true
